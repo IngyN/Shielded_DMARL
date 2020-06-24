@@ -138,7 +138,7 @@ def train(arglist):
                 # print('max: ', max_diff,  ' - diffx :', diffx, ' - diffy: ', diffy, '-  prev: ', prev, '- post: ', post)
                 print('max: ', max_diff, '-  prev: ', prev, '- post: ', post)
 
-            if max(dists) > 0.2 :
+            if max(dists) >= 0.2 :
                 print('max dist: ', dists, '-  prev: ', prev, '- post: ', post)
 
             # print(episode_step)

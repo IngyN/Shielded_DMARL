@@ -8,6 +8,7 @@ import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
 import tensorflow.contrib.layers as layers
 from GridShield import GridShield
+from copy import deepcopy
 
 def parse_args():
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
@@ -114,7 +115,9 @@ def train(arglist):
 
         if arglist.shielding:
             # initialize grid shields
-            gridshield = GridShield(env, 3, start=obs_n)
+            gridshield = GridShield(nagents=3, start=np.array(obs_n)[:, 2:4])
+
+        # interference = np.zeros([env.n, arglist.num_episodes])
 
         print('Starting iterations...')
         while True:
@@ -127,17 +130,26 @@ def train(arglist):
             prev = [agent.state.p_pos for agent in env.agents]
 
             if arglist.shielding:
-                parallel_env = env
-                pre_action_n = action_n
+                parallel_env = deepcopy(env)
+                pre_action_n = deepcopy(action_n)
                 # get a_req +
                 if arglist.grid:
-                    alt_obs_n, alt_rew, alt_done, _ = env.step(pre_action_n, discretize=True)
+                    alt_obs_n, alt_rew, alt_done, _ = parallel_env.step(pre_action_n, discretize=True)
                 else:
-                    alt_obs_n, alt_rew, alt_done, _ = env.step(pre_action_n)
+                    alt_obs_n, alt_rew, alt_done, _ = parallel_env.step(pre_action_n)
 
-                valid = gridshield.step(pre_action_n, obs_n, done_n, env)   #TODO send alt_obs_n as desired a_req
+                valid = gridshield.step(pre_action_n, np.array(obs_n)[:, 2:4], alt_done, np.array(alt_obs_n)[:, 2:4])   #TODO send alt_obs_n as desired a_req
+                punish = (~valid)  # 1 for agents that need to be punished #
+                for a in range(env.n):
+                    if punish[a]:
+                        action_n[a] = np.zeros([5])
+                        action_n[a][1] = - obs_n[a][0] * 1.5 # reversing agent momentum and inertia to standstill
+                        action_n[a][3] = - obs_n[a][1] * 1.5
 
-                #TODO update based on valid. -> not valid -> -p_vel * 1.5
+                # if len(interference[punish]) > 0:
+                #     idx_values = np.where(punish == True)[0]
+                #     for idx in idx_values:
+                #         interference[idx][e] += 1
 
             # environment step
             if arglist.grid:
@@ -162,14 +174,17 @@ def train(arglist):
             if max(dists) > 0.2 :
                 print('max dist: ', dists, '-  prev: ', prev, '- post: ', post)
 
-
-            # TODO check rewards + do shield double update.
-            # for i, agent in enumerate(trainers):
-            #     agent.experience(obs_n[i], pre_action_n[i], alt_rew[i], alt_obs_n[i], alt_done[i], terminal)
-
             # print(episode_step)
             done = all(done_n)
             terminal = (episode_step >= arglist.max_episode_len)
+
+            # TODO check rewards + do shield double update.
+            # Exrta shield update
+            if arglist.shielding:
+                if not np.all(punish == False): # only if one agent or more was modified
+                    for i, agent in enumerate(trainers):
+                        agent.experience(obs_n[i], pre_action_n[i], alt_rew[i], alt_obs_n[i], alt_done[i], terminal)
+
             # collect experience
             for i, agent in enumerate(trainers):
                 agent.experience(obs_n[i], action_n[i], rew_n[i], new_obs_n[i], done_n[i], terminal)
@@ -182,7 +197,7 @@ def train(arglist):
             if done or terminal:
                 obs_n = env.reset()
                 if arglist.shielding:
-                    gridshield.reset(obs_n) # TODO fix to take start positions
+                    gridshield.reset(np.array(obs_n)[:, 2:4]) # TODO fix to take start positions
 
                 episode_step = 0
                 episode_rewards.append(0)

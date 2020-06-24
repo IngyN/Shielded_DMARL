@@ -7,19 +7,22 @@ import random
 class GridShield:
     # Composed shield version
     # TODO fix constructor to take obs_n as start
-    def __init__(self, env, nagents=2, start=np.array([[7, 0], [6, 3]]), file='mpe_3_agents'):
+    def __init__(self, nagents=2, start=np.array([[7, 0], [6, 3]]), file='mpe_3_agents'):
         self.nagents = nagents
         base = 'shields/grid_shields/'
         self.res = [10, 10]
         self.max_per_shield = 2
         self.oob = 100
+        self.origin = [-5, 5]
 
-        self.smap = np.zeros([100, 100])
-        # print('rows :', env.nrows, ' - cols: ', env.ncols)
-        for i in range(env.nrows):
-            for j in range(env.ncols):
+        rows = 110
+        cols = 110
+        self.smap = np.zeros([rows, cols])
+
+        for i in range(rows):
+            for j in range(cols):
                 # 1 based shield number
-                shieldnum = int((i / self.res[0])) * int(env.ncols / (self.res[1])) + int(j / self.res[0])
+                shieldnum = int((i / self.res[0])) * int(cols / (self.res[1])) + int(j / self.res[0])
                 self.smap[i][j] = shieldnum
 
         self.nshields = int(np.max(self.smap))+1
@@ -30,10 +33,13 @@ class GridShield:
         self.states = np.reshape(np.arange(0, self.res[0] * self.res[1]), self.res)
 
         # loading Shields.
-        for sh in range(self.nshields):
-            f = open(base + file + '_' + str(sh) + '.shield')
-            self.shield_json.append(json.load(f))
-            f.close()
+        # for sh in range(self.nshields):
+        # Load only one shield (same shield for all shields)
+        f = open(base + file + '_' + str(0) + '.shield')
+        self.shield_json.append(json.load(f))
+        f.close()
+
+        start = self.convert_pos(start)
 
         # check in which shields agents are starting
         for i in range(self.nagents):
@@ -67,8 +73,8 @@ class GridShield:
 
         # print('shield:', i, 'pos:', pos, 'agents: ', agents)
 
-        for ind in range(len(self.shield_json[i])):
-            cur = self.shield_json[i][str(ind)]['State']
+        for ind in range(len(self.shield_json[0])):
+            cur = self.shield_json[0][str(ind)]['State']
             condition = np.zeros([self.max_per_shield])
 
             # agents currently in shield
@@ -106,25 +112,35 @@ class GridShield:
 
         return state
 
+    def convert_pos(self, pos):
+
+        for a in range(self.nagents):
+            pos[a][0] = int(abs(pos[a][0] + self.origin[0] * self.res[0]))
+            pos[a][1] = int((pos[a][1] + self.origin[1] * self.res[1]))
+
+        return pos
+
     #  use actions and current shield state to determine if action is dangerous.
     # Step -> all shields, assumption : both agents cannot have already been in the shield and both have the same idx
     # Assumption : when 2 in shield and 1 entering -> wait one turn until on agent leaves.s
     # tODO fix step to take obs_n for pos.
-    def step(self, actions, pos, goal_flag, env):
+    def step(self, actions, pos, goal_flag, desired):
         act = np.ones([self.nagents], dtype=bool)
         a_states = np.zeros([self.nagents], dtype=int)
         a_req = np.ones([self.nagents, 2], dtype=int) * -1  # desired shield state
         pos_shield = np.zeros([self.nagents], dtype=int)
         desired_shield = np.zeros([self.nagents])
-        desired = np.zeros([self.nagents, 2], dtype=int)  # desired coordinates
+        # desired = np.zeros([self.nagents, 2], dtype=int)  # desired coordinates
         shield_idx = np.ones([self.nagents, 2]) * -1  # desired agent index in shield
-        oob = np.zeros([self.nagents])
-        obs = np.zeros([self.nagents])
+        # oob = np.zeros([self.nagents])
+        # obs = np.zeros([self.nagents])
+
+        pos = self.convert_pos(pos)
 
         # update which agents are in which shields
         for i in range(self.nagents):
             # TODO remove this and take desired as input
-            desired[i], oob[i], obs[i] = env.get_next_state(pos[i], actions[i], goal_flag[i])
+            # desired[i], oob[i], obs[i] = env.get_next_state(pos[i], actions[i], goal_flag[i])
             pos_shield[i] = self.smap[pos[i][0]][pos[i][1]]
 
             if not goal_flag[i]:
@@ -159,7 +175,7 @@ class GridShield:
                     shield_idx[a] = [self.agent_pos[a][0], self.agent_pos[a][0]]
 
             temp_req = deepcopy(a_req)
-            temp_req[ex_sh] = [self.oob, self.oob] # so that exiting agents ask for 9 not sth else.
+            temp_req[ex_sh] = [self.oob, self.oob]  # so that exiting agents ask for 9 not sth else.
 
             if len(ag_sh) > self.max_per_shield:
                 print('Error too many agents in shield : ', sh)
@@ -270,12 +286,12 @@ class GridShield:
 
         self.prev_pos = deepcopy(self.agent_pos)
         for i in range(self.nagents):
-            if act[i] and not oob[i] and not obs[i]:
+            if act[i]:  # removed check for obstacle and oob
                 self.agent_pos[i] = [shield_idx[i][1], desired_shield[i]]
 
         # act says which ones need to be changed
-        actions[~ act] = False  # blocked = False
-        return actions
+        # actions[~ act] = False  # blocked = False
+        return act
 
     def _get_arr_idx(self, agent0=None, agent1=None):
         idx = []
@@ -337,10 +353,10 @@ class GridShield:
             a_req = np.array([a_req])
 
         act = np.zeros([len(goal_flag)], dtype=int)
-        successors = np.array(self.shield_json[sh][str(self.current_state[sh])]['Successors'])
+        successors = np.array(self.shield_json[0][str(self.current_state[sh])]['Successors'])
 
         for s in successors:
-            cur = self.shield_json[sh][str(s)]['State']
+            cur = self.shield_json[0][str(s)]['State']
 
             condition = self._compute_condition(cur, goal_flag, a_states, a_req, a_idx, agent0, agent1)
 
@@ -349,7 +365,7 @@ class GridShield:
                     s_str = 'a_shield' + str(i)
                     act[idx[i]] = cur[s_str]
 
-                if len(self.shield_json[sh][str(s)]['Successors']) > 0:
+                if len(self.shield_json[0][str(s)]['Successors']) > 0:
                     self.current_state[sh] = s
                 break
 
@@ -357,7 +373,9 @@ class GridShield:
 
     def reset(self, start):
         # reset to start state.
-        # TODO -> adjust for coordinates 
+        # TODO -> adjust for coordinates
+        start = self.convert_pos(start)
+
         # check in which shields agents are starting
         for i in range(self.nagents):
             sh_ind = self.smap[start[i][0]][start[i][1]]
