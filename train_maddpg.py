@@ -15,12 +15,12 @@ def parse_args():
     # Environment
     parser.add_argument("--scenario", type=str, default="simple_spread2", help="name of the scenario script")
     parser.add_argument("--max-episode-len", type=int, default=25, help="maximum episode length")
-    parser.add_argument("--num-episodes", type=int, default=60000, help="number of episodes")
+    parser.add_argument("--num-episodes", type=int, default=10000, help="number of episodes")
     parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
     parser.add_argument("--adv-policy", type=str, default="maddpg", help="policy of adversaries")
     parser.add_argument("--grid", type=bool, default="True", help="Grid snapping")
-    parser.add_argument("--shielding", type=bool, default="False", help="Enable shielding")
+    parser.add_argument("--shielding", type=bool, default="True", help="Enable shielding")
     # Core training parameters
     parser.add_argument("--lr", type=float, default=1e-2, help="learning rate for Adam optimizer")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
@@ -115,7 +115,7 @@ def train(arglist):
 
         if arglist.shielding:
             # initialize grid shields
-            gridshield = GridShield(nagents=3, start=np.array(obs_n)[:, 2:4])
+            gridshield = GridShield(nagents=3, c_start=np.array(obs_n)[:, 2:4])
 
         # interference = np.zeros([env.n, arglist.num_episodes])
 
@@ -125,9 +125,6 @@ def train(arglist):
             action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
 
             temp = np.max(np.abs(np.array(obs_n)[:, 2:4]))
-            maxipoo = max(temp, maxipoo)
-
-            prev = [agent.state.p_pos for agent in env.agents]
 
             if arglist.shielding:
                 parallel_env = deepcopy(env)
@@ -138,12 +135,12 @@ def train(arglist):
                 else:
                     alt_obs_n, alt_rew, alt_done, _ = parallel_env.step(pre_action_n)
 
-                valid = gridshield.step(pre_action_n, np.array(obs_n)[:, 2:4], alt_done, np.array(alt_obs_n)[:, 2:4])   #TODO send alt_obs_n as desired a_req
+                valid = gridshield.step(pre_action_n, np.array(obs_n)[:, 2:4], alt_done, np.array(alt_obs_n)[:, 2:4])
                 punish = (~valid)  # 1 for agents that need to be punished #
                 for a in range(env.n):
                     if punish[a]:
                         action_n[a] = np.zeros([5])
-                        action_n[a][1] = - obs_n[a][0] * 1.5 # reversing agent momentum and inertia to standstill
+                        action_n[a][1] = - obs_n[a][0] * 1.5  # reversing agent momentum and inertia to standstill
                         action_n[a][3] = - obs_n[a][1] * 1.5
 
                 # if len(interference[punish]) > 0:
@@ -158,21 +155,6 @@ def train(arglist):
                 new_obs_n, rew_n, done_n, info_n = env.step(action_n)
 
             episode_step += 1
-
-            post = [agent.state.p_pos for agent in env.agents]
-            dists = [np.sqrt(np.power(np.around(prev[i][0] - post[i][0], decimals=2), 2)
-                             + np.power(np.around(prev[i][1] - post[i][1], decimals=2),2))
-                                for i in range(env.n)]
-            diffx = [np.abs(np.around(prev[i][0] - post[i][0], decimals=3)) for i in range(env.n)]
-            diffy = [np.abs(np.around(prev[i][1] - post[i][1], decimals=3)) for i in range(env.n)]
-            max_diff = [max(diffx[i], diffy[i]) for i in range(env.n)]
-
-            if max(max_diff) > 0.2:
-                # print('max: ', max_diff,  ' - diffx :', diffx, ' - diffy: ', diffy, '-  prev: ', prev, '- post: ', post)
-                print('max: ', max_diff, '-  prev: ', prev, '- post: ', post)
-
-            if max(dists) > 0.2 :
-                print('max dist: ', dists, '-  prev: ', prev, '- post: ', post)
 
             # print(episode_step)
             done = all(done_n)
@@ -196,8 +178,9 @@ def train(arglist):
 
             if done or terminal:
                 obs_n = env.reset()
+                # print('agent pos: ', np.array(obs_n)[:, 2:4])
                 if arglist.shielding:
-                    gridshield.reset(np.array(obs_n)[:, 2:4]) # TODO fix to take start positions
+                    gridshield.reset(np.array(obs_n)[:, 2:4])  # TODO fix to take start positions
 
                 episode_step = 0
                 episode_rewards.append(0)
@@ -260,7 +243,7 @@ def train(arglist):
                 with open(agrew_file_name, 'wb') as fp:
                     pickle.dump(final_ep_ag_rewards, fp)
                 print('...Finished total of {} episodes.'.format(len(episode_rewards)))
-                print('******* The max was : {}'.format(maxipoo))
+
                 break
 
 if __name__ == '__main__':

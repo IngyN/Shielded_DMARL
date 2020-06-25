@@ -7,12 +7,12 @@ import random
 class GridShield:
     # Composed shield version
     # TODO fix constructor to take obs_n as start
-    def __init__(self, nagents=2, start=np.array([[7, 0], [6, 3]]), file='mpe_3_agents'):
+    def __init__(self, nagents=2, c_start=np.array([[7, 0], [6, 3]]), file='mpe_3_agents'):
         self.nagents = nagents
         base = 'shields/grid_shields/'
-        self.res = [10, 10]
+        self.res = [5, 5]
         self.max_per_shield = 2
-        self.oob = 100
+        self.oob = self.res[0] * self.res[1]
         self.origin = [-5, 5]
 
         rows = 110
@@ -39,7 +39,7 @@ class GridShield:
         self.shield_json.append(json.load(f))
         f.close()
 
-        start = self.convert_pos(start)
+        start = self.convert_pos(c_start)
 
         # check in which shields agents are starting
         for i in range(self.nagents):
@@ -113,18 +113,18 @@ class GridShield:
         return state
 
     def convert_pos(self, pos):
-
+        new_pos = np.zeros(pos.shape, dtype=int)
         for a in range(self.nagents):
-            pos[a][0] = int(abs(pos[a][0] + self.origin[0] * self.res[0]))
-            pos[a][1] = int((pos[a][1] + self.origin[1] * self.res[1]))
+            new_pos[a][0] = int(abs(pos[a][1] + self.origin[0]) * 10)
+            new_pos[a][1] = int((pos[a][0] + self.origin[1]) * 10)
 
-        return pos
+        return new_pos
 
     #  use actions and current shield state to determine if action is dangerous.
     # Step -> all shields, assumption : both agents cannot have already been in the shield and both have the same idx
     # Assumption : when 2 in shield and 1 entering -> wait one turn until on agent leaves.s
     # tODO fix step to take obs_n for pos.
-    def step(self, actions, pos, goal_flag, desired):
+    def step(self, actions, pos, goal_flag, desired_pos):
         act = np.ones([self.nagents], dtype=bool)
         a_states = np.zeros([self.nagents], dtype=int)
         a_req = np.ones([self.nagents, 2], dtype=int) * -1  # desired shield state
@@ -136,6 +136,8 @@ class GridShield:
         # obs = np.zeros([self.nagents])
 
         pos = self.convert_pos(pos)
+        desired = self.convert_pos(desired_pos)
+        goal_flag = np.array(goal_flag, dtype=int)
 
         # update which agents are in which shields
         for i in range(self.nagents):
@@ -347,7 +349,7 @@ class GridShield:
 
         # print('idx test: ', [agent0, agent1], ' -- ', a_idx)
 
-        if type(goal_flag) is np.int64:  # if there's only one agent
+        if type(goal_flag) is np.int64 or type(goal_flag) is bool:  # if there's only one agent
             goal_flag = np.array([goal_flag])
             a_states = np.array([a_states])
             a_req = np.array([a_req])
@@ -371,10 +373,10 @@ class GridShield:
 
         return act
 
-    def reset(self, start):
+    def reset(self, start_c):
         # reset to start state.
         # TODO -> adjust for coordinates
-        start = self.convert_pos(start)
+        start = self.convert_pos(start_c)
 
         # check in which shields agents are starting
         for i in range(self.nagents):
