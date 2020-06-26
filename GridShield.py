@@ -389,6 +389,8 @@ class GridShield:
             ag = np.where(self.agent_pos[:, 1] == sh)[0]
 
             if len(ag) > 0:  # if there are agents starting in that shield
+                if len(ag) > 2:
+                    print('start :', start_c, ' -- start : ', start)
                 found = self._find_start_state(start, sh, ag)
                 if found:
                     self.current_state[sh] = self.start_state[sh]

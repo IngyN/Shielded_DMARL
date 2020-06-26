@@ -15,7 +15,7 @@ def parse_args():
     # Environment
     parser.add_argument("--scenario", type=str, default="simple_spread2", help="name of the scenario script")
     parser.add_argument("--max-episode-len", type=int, default=25, help="maximum episode length")
-    parser.add_argument("--num-episodes", type=int, default=10000, help="number of episodes")
+    parser.add_argument("--num-episodes", type=int, default=60000, help="number of episodes")
     parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
     parser.add_argument("--adv-policy", type=str, default="maddpg", help="policy of adversaries")
@@ -35,6 +35,7 @@ def parse_args():
     parser.add_argument("--restore", action="store_true", default=False)
     parser.add_argument("--display", action="store_true", default=False)
     parser.add_argument("--benchmark", action="store_true", default=False)
+    parser.add_argument("--collisions", action="store_true", default=True)
     parser.add_argument("--benchmark-iters", type=int, default=100000, help="number of iterations run for benchmarking")
     parser.add_argument("--benchmark-dir", type=str, default="benchmark_files/", help="directory where benchmark data is saved")
     parser.add_argument("--plots-dir", type=str, default="learning_curves/", help="directory where plot data is saved")
@@ -178,7 +179,7 @@ def train(arglist):
 
             if done or terminal:
                 obs_n = env.reset()
-                # print('agent pos: ', np.array(obs_n)[:, 2:4])
+                # print('agent pos: ', np.array(obs_n)[:, 2:4].flatten())
                 if arglist.shielding:
                     gridshield.reset(np.array(obs_n)[:, 2:4])  # TODO fix to take start positions
 
@@ -192,7 +193,7 @@ def train(arglist):
             train_step += 1
 
             # for benchmarking learned policies
-            if arglist.benchmark:
+            if arglist.benchmark or arglist.collisions:
                 for i, info in enumerate(info_n):
                     agent_info[-1][i].append(info_n['n'])
                 if train_step > arglist.benchmark_iters and (done or terminal):

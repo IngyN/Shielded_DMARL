@@ -155,6 +155,40 @@ def train(arglist):
 
             if done or terminal:
                 obs_n = env.reset()
+                pos_n = np.array(obs_n)[:, 2:4]
+
+                # quad a
+                val = True
+                for a in range(env.n):
+                    val = val and ( pos_n[a][0] < 0 and pos_n[a][1] >= 0 )
+
+                if val :
+                    print('error agent pos: ', np.array(obs_n)[:, 2:4].flatten())
+
+                # quad b
+                val = True
+                for a in range(env.n):
+                    val = val and (pos_n[a][0] >= 0 and pos_n[a][1] > 0)
+
+                if val:
+                    print('error agent pos: ', np.array(obs_n)[:, 2:4].flatten())
+
+                # quad c
+                val = True
+                for a in range(env.n):
+                    val = val and (pos_n[a][0] > 0 and pos_n[a][1] <= 0)
+
+                if val:
+                    print('error agent pos: ', np.array(obs_n)[:, 2:4].flatten())
+
+                # quad d
+                val = True
+                for a in range(env.n):
+                    val = val and (pos_n[a][0] <= 0 and pos_n[a][1] < 0)
+
+                if val:
+                    print('error agent pos: ', np.array(obs_n)[:, 2:4].flatten())
+
                 episode_step = 0
                 episode_rewards.append(0)
                 for a in agent_rewards:
