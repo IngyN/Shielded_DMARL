@@ -3,12 +3,14 @@ import numpy as np
 import tensorflow as tf
 import time
 import pickle
+import logging
 
 import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
 import tensorflow.contrib.layers as layers
 from GridShield import GridShield
 from copy import deepcopy
+# from CustomLogger import CustomLogger
 
 def parse_args():
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
@@ -36,6 +38,7 @@ def parse_args():
     parser.add_argument("--display", action="store_true", default=False)
     parser.add_argument("--benchmark", action="store_true", default=False)
     parser.add_argument("--collisions", action="store_true", default=True)
+    parser.add_argument("--debug", action="store_true", default=False)
     parser.add_argument("--benchmark-iters", type=int, default=100000, help="number of iterations run for benchmarking")
     parser.add_argument("--benchmark-dir", type=str, default="benchmark_files/", help="directory where benchmark data is saved")
     parser.add_argument("--plots-dir", type=str, default="learning_curves/", help="directory where plot data is saved")
@@ -83,8 +86,17 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
 
 def train(arglist):
     with U.single_threaded_session():
+
+        # logger =CustomLogger(file=arglist.exp_name)
+        logging.basicConfig(filename='logs/'+arglist.exp_name+'.log', filemode='w', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+        print('shielding : ', arglist.shielding)
+        logging.info(f'shielding: {arglist.shielding}')
+        # arglist.shielding=False
+        # print('shielding : ', arglist.shielding)
+        
         # Create environment
-        env = make_env(arglist.scenario, arglist, arglist.benchmark)
+        env = make_env(arglist.scenario, arglist, (arglist.benchmark or arglist.collisions))
 
         # Create agent trainers
         obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
@@ -107,12 +119,23 @@ def train(arglist):
         final_ep_rewards = []  # sum of rewards for training curve
         final_ep_ag_rewards = []  # agent rewards for training curve
         agent_info = [[[]]]  # placeholder for benchmarking info
+        collisions_info = []
+        collisions_info_ag = [[0,0,0]]
         saver = tf.train.Saver()
         obs_n = env.reset()
         episode_step = 0
         train_step = 0
         t_start = time.time()
-        maxipoo = 0
+
+        if arglist.debug:
+            # pass
+            env.agents[0].state.p_pos = [-0., -0.6]
+            env.agents[1].state.p_pos = [0, -0.9]
+            env.agents[2].state.p_pos = [-0.1, -0.4]
+
+            obs_n[0][2:4] = [-0. , -0.6]
+            obs_n[1][2:4] = [0, -0.9]
+            obs_n[2][2:4] = [-0.1, -0.4]
 
         if arglist.shielding:
             # initialize grid shields
@@ -121,11 +144,13 @@ def train(arglist):
         # interference = np.zeros([env.n, arglist.num_episodes])
 
         print('Starting iterations...')
+        logging.info('Starting iterations...')
+
         while True:
             # get action
             action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
 
-            temp = np.max(np.abs(np.array(obs_n)[:, 2:4]))
+            prev = [agent.state.p_pos.flatten() for agent in env.agents]
 
             if arglist.shielding:
                 parallel_env = deepcopy(env)
@@ -136,13 +161,26 @@ def train(arglist):
                 else:
                     alt_obs_n, alt_rew, alt_done, _ = parallel_env.step(pre_action_n)
 
+                new_pos = [agent.state.p_pos for agent in parallel_env.agents]
+                if arglist.debug:
+                    print(f"shield states: [{gridshield.current_state[int(gridshield.agent_pos[0][1])]}, "
+                          f"{gridshield.current_state[int(gridshield.agent_pos[1][1])]}, "
+                          f"{gridshield.current_state[int(gridshield.agent_pos[2][1])]}] \t\t- pos : {new_pos} "
+                          f" \t\t- ag pos : {gridshield.agent_pos.flatten()}")
+
+                logging.info(f"shield states: [{gridshield.current_state[int(gridshield.agent_pos[0][1])]},"
+                          f"{gridshield.current_state[int(gridshield.agent_pos[1][1])]},"
+                          f"{gridshield.current_state[int(gridshield.agent_pos[2][1])]}]\t- pos: {new_pos}"
+                          f" \t- ag pos: {gridshield.agent_pos.flatten()} - action : {np.array(action_n).tolist()}")
                 valid = gridshield.step(pre_action_n, np.array(obs_n)[:, 2:4], alt_done, np.array(alt_obs_n)[:, 2:4])
+
                 punish = (~valid)  # 1 for agents that need to be punished #
-                for a in range(env.n):
-                    if punish[a]:
-                        action_n[a] = np.zeros([5])
-                        action_n[a][1] = - obs_n[a][0] * 1.5  # reversing agent momentum and inertia to standstill
-                        action_n[a][3] = - obs_n[a][1] * 1.5
+                if not np.all(punish == False):
+                    for a in range(env.n):
+                        if punish[a]:
+                            action_n[a] = np.zeros([5])
+                            action_n[a][1] = - obs_n[a][0] * 1.5  # reversing agent momentum and inertia to standstill
+                            action_n[a][3] = - obs_n[a][1] * 1.5
 
                 # if len(interference[punish]) > 0:
                 #     idx_values = np.where(punish == True)[0]
@@ -154,6 +192,8 @@ def train(arglist):
                 new_obs_n, rew_n, done_n, info_n = env.step(action_n, discretize=True)
             else:
                 new_obs_n, rew_n, done_n, info_n = env.step(action_n)
+
+            post = [agent.state.p_pos for agent in env.agents]
 
             episode_step += 1
 
@@ -179,6 +219,9 @@ def train(arglist):
 
             if done or terminal:
                 obs_n = env.reset()
+                if arglist.debug:
+                    print('----------- end of episode ------ ')
+                logging.info('------------------ end of episode -------------- ')
                 # print('agent pos: ', np.array(obs_n)[:, 2:4].flatten())
                 if arglist.shielding:
                     gridshield.reset(np.array(obs_n)[:, 2:4])  # TODO fix to take start positions
@@ -188,12 +231,24 @@ def train(arglist):
                 for a in agent_rewards:
                     a.append(0)
                 agent_info.append([[]])
+                collisions_info_ag.append([0,0,0])
 
             # increment global step counter
             train_step += 1
 
+            # aggregate collision information
+            if arglist.collisions:
+                col = []
+                for i, info in enumerate(info_n['n']):
+                    col.append(info_n['n'][i][1])
+                    collisions_info_ag[-1][i] += info[1] # TODO test this
+                    if info_n['n'][i][1] != 0:
+                        print('collision not 0')
+                        logging.error(' collision not 0')
+                collisions_info.append(col)
+
             # for benchmarking learned policies
-            if arglist.benchmark or arglist.collisions:
+            if arglist.benchmark:
                 for i, info in enumerate(info_n):
                     agent_info[-1][i].append(info_n['n'])
                 if train_step > arglist.benchmark_iters and (done or terminal):
@@ -243,6 +298,13 @@ def train(arglist):
                 agrew_file_name = arglist.plots_dir + arglist.exp_name + '_agrewards.pkl'
                 with open(agrew_file_name, 'wb') as fp:
                     pickle.dump(final_ep_ag_rewards, fp)
+                if arglist.collisions: 
+                    file_name = arglist.benchmark_dir + arglist.exp_name + '.pkl'
+                    ag_file_name = arglist.benchmark_dir + arglist.exp_name + '_ag.pkl'
+                    with open(file_name, 'wb') as fp:
+                        pickle.dump(collisions_info[:-1], fp)
+                    with open(ag_file_name, 'wb') as fp:
+                        pickle.dump(collisions_info_ag[:-1], fp)
                 print('...Finished total of {} episodes.'.format(len(episode_rewards)))
 
                 break

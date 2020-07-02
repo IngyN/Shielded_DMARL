@@ -2,7 +2,7 @@ import json
 import numpy as np
 from copy import deepcopy
 import random
-
+import logging
 
 class GridShield:
     # Composed shield version
@@ -35,7 +35,7 @@ class GridShield:
         # loading Shields.
         # for sh in range(self.nshields):
         # Load only one shield (same shield for all shields)
-        f = open(base + file + '_' + str(0) + '.shield')
+        f = open(base + file + '_' + str(45) + '.shield')
         self.shield_json.append(json.load(f))
         f.close()
 
@@ -57,10 +57,12 @@ class GridShield:
                     self.current_state[sh] = self.start_state[sh]
                 else:
                     print('State not found for shield : ', str(sh))
+                    logging.error(f'State not found for shield : {sh}')
 
         # print(self.agent_pos)
         self.start_pos = deepcopy(self.agent_pos)
         self.prev_pos = deepcopy(self.agent_pos)
+        # logging.info('shield initialization done')
 
     # search shield to find right start state based on agent start states
     # i = index of shield, agents = indices of agents in shield i
@@ -138,7 +140,7 @@ class GridShield:
         pos = self.convert_pos(pos)
         desired = self.convert_pos(desired_pos)
         goal_flag = np.array(goal_flag, dtype=int)
-
+        # logging.info('start shield step')
         # update which agents are in which shields
         for i in range(self.nagents):
             # TODO remove this and take desired as input
@@ -171,6 +173,7 @@ class GridShield:
                     ex_sh.append(a)
 
             # for if an agent tried to go to an invalid location but didnt actually go there.
+            # tODO maybe remove this?
             for a in ag_sh:
                 if sh != int(self.agent_pos[a][1]):
                     self.agent_pos[a] = deepcopy(self.prev_pos[a])
@@ -180,6 +183,7 @@ class GridShield:
             temp_req[ex_sh] = [self.oob, self.oob]  # so that exiting agents ask for 9 not sth else.
 
             if len(ag_sh) > self.max_per_shield:
+                logging.info(f'Error too many agents in shield: {sh}')
                 print('Error too many agents in shield : ', sh)
 
             elif len(ag_sh) == 0 and len(des_sh) > 0:  # there are no current agents but there are new ones
@@ -347,6 +351,7 @@ class GridShield:
         idx = self._get_arr_idx(agent0=agent0, agent1=agent1) # idx of present agent in arrays
         a_idx = self._get_agent_idx(agent0=agent0, agent1=agent1) # idx of present agents
 
+        found = False
         # print('idx test: ', [agent0, agent1], ' -- ', a_idx)
 
         if type(goal_flag) is np.int64 or type(goal_flag) is bool:  # if there's only one agent
@@ -363,6 +368,7 @@ class GridShield:
             condition = self._compute_condition(cur, goal_flag, a_states, a_req, a_idx, agent0, agent1)
 
             if np.all(condition):  # found the correct successor
+                found = True
                 for i in range(len(goal_flag)):
                     s_str = 'a_shield' + str(i)
                     act[idx[i]] = cur[s_str]
@@ -371,12 +377,17 @@ class GridShield:
                     self.current_state[sh] = s
                 break
 
+        if not found:
+            print(f' ****** Err: successor not found for {sh}. astates: {a_states} - areq {a_req} - cur state:{self.current_state[sh]}')
+            logging.error(f'Err: successor not found for {sh}. astates: {a_states} - areq {a_req} - cur state:{self.current_state[sh]}')
+
         return act
 
     def reset(self, start_c):
         # reset to start state.
         # TODO -> adjust for coordinates
         start = self.convert_pos(start_c)
+        self.current_state = np.zeros([self.nshields], dtype=int)
 
         # check in which shields agents are starting
         for i in range(self.nagents):
@@ -396,8 +407,9 @@ class GridShield:
                     self.current_state[sh] = self.start_state[sh]
                 else:
                     print('State not found for shield : ', str(sh))
+                    logging.error(to_log=f'State not found for shield : {sh}')
 
-        # self.current_state = deepcopy(self.start_state)
+
         # self.agent_pos = deepcopy(self.start_pos)
         self.prev_pos = deepcopy(self.agent_pos)
 
