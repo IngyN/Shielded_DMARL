@@ -30,7 +30,7 @@ def parse_args():
     parser.add_argument("--num-units", type=int, default=64, help="number of units in the mlp")
     # Checkpointing
     parser.add_argument("--exp-name", type=str, default=None, help="name of the experiment")
-    parser.add_argument("--save-dir", type=str, default="/tmp/policy/", help="directory in which training state and model should be saved")
+    parser.add_argument("--save-dir", type=str, default="policy/", help="directory in which training state and model should be saved")
     parser.add_argument("--save-rate", type=int, default=1000, help="save model once every time this many episodes are completed")
     parser.add_argument("--load-dir", type=str, default="", help="directory in which training state and model are loaded")
     # Evaluation
@@ -228,7 +228,7 @@ def train(arglist):
             done = all(done_n)
             terminal = (episode_step >= arglist.max_episode_len)
 
-            # TODO check rewards + do shield double update.
+            #  check rewards + do shield double update.
             # Exrta shield update
             if arglist.shielding:
                 if not np.all(punish == False): # only if one agent or more was modified
