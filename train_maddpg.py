@@ -83,6 +83,26 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
             local_q_func=(arglist.good_policy=='ddpg')))
     return trainers
 
+def make_parallel(env, scenario_name=None, benchmark=False):
+    from multiagent.environment import MultiAgentEnv
+    import multiagent.scenarios as scenarios
+    # load scenario from script
+    scenario = scenarios.load(scenario_name + ".py").Scenario()
+    # create world
+    world = scenario.make_world()
+    # create multiagent environment
+    if benchmark:
+        para = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation, scenario.benchmark_data)
+    else:
+        para = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation)
+
+    return update_parallel(env, para)
+
+def update_parallel(env, parallel_env):
+    parallel_env.agents = deepcopy(env.agents)
+    parallel_env.world = deepcopy(env.world)
+
+    return parallel_env
 
 def train(arglist):
     with U.single_threaded_session():
@@ -128,18 +148,21 @@ def train(arglist):
         t_start = time.time()
 
         if arglist.debug:
-            # pass
-            env.agents[0].state.p_pos = [-0., -0.6]
-            env.agents[1].state.p_pos = [0, -0.9]
-            env.agents[2].state.p_pos = [-0.1, -0.4]
-
-            obs_n[0][2:4] = [-0. , -0.6]
-            obs_n[1][2:4] = [0, -0.9]
-            obs_n[2][2:4] = [-0.1, -0.4]
+            pass
+            # env.agents[0].state.p_pos = [-0., -0.6]
+            # env.agents[1].state.p_pos = [0, -0.9]
+            # env.agents[2].state.p_pos = [-0.1, -0.4]
+            #
+            # obs_n[0][2:4] = [-0. , -0.6]
+            # obs_n[1][2:4] = [0, -0.9]
+            # obs_n[2][2:4] = [-0.1, -0.4]
 
         if arglist.shielding:
             # initialize grid shields
             gridshield = GridShield(nagents=3, c_start=np.array(obs_n)[:, 2:4])
+
+        if arglist.display:
+            parallel_env = make_parallel(env, arglist.scenario,(arglist.benchmark or arglist.collisions))
 
         # interference = np.zeros([env.n, arglist.num_episodes])
 
@@ -153,7 +176,11 @@ def train(arglist):
             prev = [agent.state.p_pos.flatten() for agent in env.agents]
 
             if arglist.shielding:
-                parallel_env = deepcopy(env)
+                if arglist.display:
+                    parallel_env = update_parallel(env, parallel_env)
+                else:
+                    parallel_env = deepcopy(env)
+
                 pre_action_n = deepcopy(action_n)
                 # get a_req +
                 if arglist.grid:
