@@ -140,7 +140,7 @@ def train(arglist):
         final_ep_ag_rewards = []  # agent rewards for training curve
         agent_info = [[[]]]  # placeholder for benchmarking info
         collisions_info = []
-        collisions_info_ag = [[0,0,0]]
+        collisions_info_ag = [[0]*env.n]
         saver = tf.train.Saver()
         obs_n = env.reset()
         episode_step = 0
@@ -159,7 +159,7 @@ def train(arglist):
 
         if arglist.shielding:
             # initialize grid shields
-            gridshield = GridShield(nagents=3, c_start=np.array(obs_n)[:, 2:4])
+            gridshield = GridShield(nagents=env.n, c_start=np.array(obs_n)[:, 2:4])
 
         if arglist.display:
             parallel_env = make_parallel(env, arglist.scenario,(arglist.benchmark or arglist.collisions))
@@ -258,7 +258,7 @@ def train(arglist):
                 for a in agent_rewards:
                     a.append(0)
                 agent_info.append([[]])
-                collisions_info_ag.append([0,0,0])
+                collisions_info_ag.append([0]*env.n)
 
             # increment global step counter
             train_step += 1
@@ -269,7 +269,7 @@ def train(arglist):
                 for i, info in enumerate(info_n['n']):
                     col.append(info_n['n'][i][1])
                     collisions_info_ag[-1][i] += info[1] # TODO test this
-                    if info_n['n'][i][1] != 0:
+                    if info_n['n'][i][1] != 0 and arglist.shielding:
                         print('collision not 0')
                         logging.error(' collision not 0')
                 collisions_info.append(col)

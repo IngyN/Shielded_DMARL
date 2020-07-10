@@ -211,7 +211,7 @@ class GridShield:
                 else:
                     temp = self.step_one(sh, [goal_flag[des_sh[0]], goal_flag[des_sh[1]]],
                                          [a_req[des_sh[0]], a_req[des_sh[1]]],
-                                         [a_des_states[des_sh[0]], a_des_states[1]],
+                                         [a_des_states[0], a_des_states[1]],
                                          agent0=des_sh[0], agent1=des_sh[1])
                     shield_idx[des_sh[0]][1] = 0
                     shield_idx[des_sh[1]][1] = 1
