@@ -110,9 +110,10 @@ def train(arglist):
         # logger =CustomLogger(file=arglist.exp_name)
         logging.basicConfig(filename='logs/'+arglist.exp_name+'.log', filemode='w', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
+        arglist.shielding=False
         print('shielding : ', arglist.shielding)
         logging.info(f'shielding: {arglist.shielding}')
-        # arglist.shielding=False
+
         # print('shielding : ', arglist.shielding)
         
         # Create environment
