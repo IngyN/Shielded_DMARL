@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 import time
 import pickle
+import json
 import logging
 
 import maddpg.common.tf_util as U
@@ -53,15 +54,22 @@ def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=Non
         out = layers.fully_connected(out, num_outputs=num_outputs, activation_fn=None)
         return out
 
-def make_env(scenario_name, arglist, benchmark=False):
+def make_env(scenario_name, arglist, config=None, benchmark=False, multi_goal=False):
     from multiagent.environment import MultiAgentEnv
     import multiagent.scenarios as scenarios
 
     # load scenario from script
     scenario = scenarios.load(scenario_name + ".py").Scenario()
     print('************ Loading scenario: {}'.format(scenario_name))
+
     # create world
-    world = scenario.make_world()
+    if multi_goal:
+        with open('config/'+config["particle_config"]) as f:
+            config_particle = json.load(f)
+        n_agents = config_particle['n_agents']
+        world = scenario.make_world(n_agents, config_particle)
+    else:
+        world = scenario.make_world()
     # create multiagent environment
     if benchmark:
         env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation, scenario.benchmark_data)
@@ -83,13 +91,19 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
             local_q_func=(arglist.good_policy=='ddpg')))
     return trainers
 
-def make_parallel(env, scenario_name=None, benchmark=False):
+def make_parallel(env, scenario_name=None, config=None, benchmark=False, multi_goal=False):
     from multiagent.environment import MultiAgentEnv
     import multiagent.scenarios as scenarios
     # load scenario from script
     scenario = scenarios.load(scenario_name + ".py").Scenario()
     # create world
-    world = scenario.make_world()
+    if multi_goal:
+        with open(config["particle_config"]) as f:
+            config_particle = json.load(f)
+        n_agents = config_particle['n_agents']
+        world = scenario.make_world(n_agents, config_particle)
+    else:
+        world = scenario.make_world()
     # create multiagent environment
     if benchmark:
         para = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation, scenario.benchmark_data)
@@ -110,14 +124,19 @@ def train(arglist):
         # logger =CustomLogger(file=arglist.exp_name)
         logging.basicConfig(filename='logs/'+arglist.exp_name+'.log', filemode='w', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-        arglist.shielding=False
+        # arglist.shielding=False
         print('shielding : ', arglist.shielding)
         logging.info(f'shielding: {arglist.shielding}')
 
         # print('shielding : ', arglist.shielding)
-        
+        config = None
+        if arglist.scenario == 'multi_goal_spread':
+            multi_goal = True
+            with open('config/config.json', 'r') as f:
+                config = json.load(f)
+
         # Create environment
-        env = make_env(arglist.scenario, arglist, (arglist.benchmark or arglist.collisions))
+        env = make_env(arglist.scenario, arglist, config, (arglist.benchmark or arglist.collisions), multi_goal)
 
         # Create agent trainers
         obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
@@ -163,7 +182,7 @@ def train(arglist):
             gridshield = GridShield(nagents=env.n, c_start=np.array(obs_n)[:, 2:4])
 
         if arglist.display:
-            parallel_env = make_parallel(env, arglist.scenario,(arglist.benchmark or arglist.collisions))
+            parallel_env = make_parallel(env, arglist.scenario,config, (arglist.benchmark or arglist.collisions), multi_goal)
 
         # interference = np.zeros([env.n, arglist.num_episodes])
 
