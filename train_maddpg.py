@@ -98,7 +98,7 @@ def make_parallel(env, scenario_name=None, config=None, benchmark=False, multi_g
     scenario = scenarios.load(scenario_name + ".py").Scenario()
     # create world
     if multi_goal:
-        with open(config["particle_config"]) as f:
+        with open('config/'+config["particle_config"]) as f:
             config_particle = json.load(f)
         n_agents = config_particle['n_agents']
         world = scenario.make_world(n_agents, config_particle)

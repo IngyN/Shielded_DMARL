@@ -2,7 +2,7 @@ import argparse
 import numpy as np
 import tensorflow as tf
 import time
-import pickle
+import pickle, json
 
 import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
@@ -46,7 +46,7 @@ def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=Non
         out = layers.fully_connected(out, num_outputs=num_outputs, activation_fn=None)
         return out
 
-def make_env(scenario_name, arglist, benchmark=False):
+def make_env(scenario_name, config=None, benchmark=False, multi_goal=False):
     from multiagent.environment import MultiAgentEnv
     import multiagent.scenarios as scenarios
 
@@ -54,7 +54,13 @@ def make_env(scenario_name, arglist, benchmark=False):
     scenario = scenarios.load(scenario_name + ".py").Scenario()
     print('************ Loading scenario: {}'.format(scenario_name))
     # create world
-    world = scenario.make_world()
+    if multi_goal:
+        with open('config/'+config["particle_config"]) as f:
+            config_particle = json.load(f)
+        n_agents = config_particle['n_agents']
+        world = scenario.make_world(n_agents, config_particle)
+    else:
+        world = scenario.make_world()
     # create multiagent environment
     if benchmark:
         env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation, scenario.benchmark_data)
@@ -79,8 +85,15 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
 
 def train(arglist):
     with U.single_threaded_session():
+        config = None
+        if arglist.scenario == 'multi_goal_spread':
+            multi_goal = True
+            with open('config/config.json', 'r') as f:
+                config = json.load(f)
+
         # Create environment
-        env = make_env(arglist.scenario, arglist, arglist.benchmark)
+        env = make_env(arglist.scenario, config, (arglist.benchmark ), multi_goal)
+
         # Create agent trainers
         obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
         num_adversaries = min(env.n, arglist.num_adversaries)
@@ -138,7 +151,7 @@ def train(arglist):
                 # print('max: ', max_diff,  ' - diffx :', diffx, ' - diffy: ', diffy, '-  prev: ', prev, '- post: ', post)
                 print('max: ', max_diff, '-  prev: ', prev, '- post: ', post)
 
-            if max(dists) >= 0.2 :
+            if max(dists) >= 0.14 :
                 print('max dist: ', dists, '-  prev: ', prev, '- post: ', post)
 
             # print(episode_step)
