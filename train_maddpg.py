@@ -130,10 +130,13 @@ def train(arglist):
 
         # print('shielding : ', arglist.shielding)
         config = None
+        multi_goal=False
+
         if arglist.scenario == 'multi_goal_spread':
             multi_goal = True
             with open('config/config.json', 'r') as f:
                 config = json.load(f)
+                print(f'sub-scenario: {config["particle_config"][23:]}')
 
         # Create environment
         env = make_env(arglist.scenario, arglist, config, (arglist.benchmark or arglist.collisions), multi_goal)

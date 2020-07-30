@@ -117,7 +117,12 @@ class GridShield:
     def convert_pos(self, pos):
         new_pos = np.zeros(pos.shape, dtype=int)
         for a in range(self.nagents):
-            new_pos[a][0] = int(abs(pos[a][1] + self.origin[0]) * 10)
+            temp = abs(pos[a][1] + self.origin[0])*10
+            if temp - int(temp) > 0.95 :
+                new_pos[a][0] = round(temp)
+            else:
+                new_pos[a][0] = int(temp)
+
             temp = (pos[a][0] + self.origin[1]) * 10
             if temp - int(temp) > 0.95 :
                 new_pos[a][1] = round(temp)
