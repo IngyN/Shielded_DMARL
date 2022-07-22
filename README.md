@@ -6,6 +6,7 @@ This repository contains the code for the composed shielding experiments with ma
 - gym
 - matplotlib 3.0.0 
 - [particle environment](https://github.com/openai/multiagent-particle-envs) for deep MARL experiments (modified to be discretized + scenarios - code missing due to computer problems).
+- shields for the particle environment synthesized using the [Slugs](https://github.com/VerifiableRobotics/slugs) tool, not provided because of file sizes.
 
 #### Code structure:
 - `GridShield.py`: contains the implementation of the composed shielding method currently restricted to 2 agents per shield but code can be modified to accomodate more. 
